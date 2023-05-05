@@ -1,12 +1,12 @@
 {
   "name": "nylas-read-emails-node",
   "version": "0.1.0",
-  "description": "Demo using the Nylas Node SDK and ExpressJS.",
+  "description": "Read Emails using Nylas Node SDK and ExpressJS.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "author": "Nylas Team",
+  "author": "Mohammed Rafique",
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.15.2",
