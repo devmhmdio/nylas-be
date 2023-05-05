@@ -153,4 +153,4 @@ app.get('/nylas/file', isAuthenticated, async (req, res) => {
 });
 
 // Start listening on port 9000
-app.listen(port, () => console.log('App listening on port ' + port));
+app.listen(port, '0.0.0.0', () => console.log('App listening on port ' + port));
