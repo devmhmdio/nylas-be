@@ -55,6 +55,10 @@ openWebhookTunnel({
   console.log('Webhook tunnel registered. Webhook ID: ' + webhookDetails.id);
 });
 
+app.get('/', (req, res) => {
+  res.send("Welcome to Nylas Backend");
+});
+
 // '/nylas/generate-auth-url': This route builds the URL for
 // authenticating users to your Nylas application via Hosted Authentication
 app.post('/nylas/generate-auth-url', express.json(), async (req, res) => {
