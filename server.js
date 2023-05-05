@@ -16,7 +16,7 @@ const app = express();
 app.use(cors());
 
 // The port the express app will run on
-const port = 9000;
+const port = process.env.PORT || 9000;
 
 // Initialize the Nylas SDK using the client credentials
 Nylas.config({
@@ -153,4 +153,4 @@ app.get('/nylas/file', isAuthenticated, async (req, res) => {
 });
 
 // Start listening on port 9000
-app.listen(port, '0.0.0.0', () => console.log('App listening on port ' + port));
+app.listen(port, () => console.log('App listening on port ' + port));
