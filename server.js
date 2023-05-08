@@ -2,15 +2,31 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const mockDb = require('./utils/mock-db');
-
+const mongoose = require('mongoose');
 const Nylas = require('nylas');
 const { WebhookTriggers } = require('nylas/lib/models/webhook');
 const { Scope } = require('nylas/lib/models/connect');
 const { openWebhookTunnel } = require('nylas/lib/services/tunnel');
+const emails = require('./models/emails');
+const { Configuration, OpenAIApi } = require('openai');
+const reply = require('./models/reply');
 
 dotenv.config();
 
 const app = express();
+
+async function connectToMongoDB() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Connected to MongoDB Atlas using Mongoose');
+  } catch (error) {
+    console.error('Error connecting to MongoDB Atlas using Mongoose:', error);
+    process.exit(1);
+  }
+}
 
 // Enable CORS
 app.use(cors());
@@ -56,7 +72,7 @@ openWebhookTunnel({
 });
 
 app.get('/', (req, res) => {
-  res.send("Welcome to Nylas Backend");
+  res.send('Welcome to Nylas Backend');
 });
 
 // '/nylas/generate-auth-url': This route builds the URL for
@@ -121,13 +137,35 @@ async function isAuthenticated(req, res, next) {
 // Add route for getting 5 latest emails
 app.get('/nylas/read-emails', isAuthenticated, async (req, res) => {
   const user = res.locals.user;
-
   const threads = await Nylas.with(user.accessToken).threads.list({
     limit: 5,
     expanded: true,
   });
+  const createEmailPromises = threads.map(async (thread) => {
+    try {
+      await emails.create({
+        subject: thread.subject,
+        snippet: thread.snippet,
+        fromEmail: thread.messages[0].from[0].email,
+        ownEmail: user.emailAddress,
+        userId: user.id
+      });
+    } catch (error) {
+      if (error.name === 'MongoError' && error.code === 11000) {
+        console.log('Email with the same subject and snippet already exists');
+      } else {
+        console.error('Unexpected error:', error);
+      }
+    }
+  });
 
-  return res.json(threads);
+  try {
+    await Promise.all(createEmailPromises);
+    return res.status(201).json(threads);
+  } catch (error) {
+    console.error('Error in Promise.all:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 // Add route for getting individual message by id
@@ -152,5 +190,50 @@ app.get('/nylas/file', isAuthenticated, async (req, res) => {
   return res.end(fileData?.body);
 });
 
+// openai configuration
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
+
+// Add route for reading email from database and generating replies
+app.get('/nylas/read-email-gpt', isAuthenticated, async (req, res) => {
+  const user = res.locals.user;
+  const allEmails = await emails.find({
+    ownEmail: user.emailAddress,
+  });
+  allEmails.forEach(async ({ subject, snippet }) => {
+    const prompt = `Subject: ${subject} \n,Body: ${snippet},\n Please write a reply for the given email with subject and body sperated`;
+    const response = await openai.createCompletion({
+      model: 'text-davinci-003',
+      prompt: prompt,
+      max_tokens: 400,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
+    console.log('this is response', response.data.choices[0].text);
+    await reply.create({
+      body: response.data.choices[0].text,
+      userEmail: user.emailAddress,
+    })
+  });
+  return true;
+});
+
+// add route for displaying replies
+app.get('/nylas/read-replies', isAuthenticated, async (req, res) => {
+  const user = res.locals.user;
+  try {
+    const replies = await reply.find({ userEmail: user.emailAddress });
+    return replies
+  } catch (err) {
+    console.error(e.message);
+  }
+});
+
 // Start listening on port 9000
-app.listen(port, () => console.log('App listening on port ' + port));
+app.listen(port, async () => {
+  await connectToMongoDB();
+  console.log('App listening on port ' + port);
+});
