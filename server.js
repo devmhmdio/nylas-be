@@ -10,6 +10,7 @@ const { openWebhookTunnel } = require('nylas/lib/services/tunnel');
 const emails = require('./models/emails');
 const { Configuration, OpenAIApi } = require('openai');
 const reply = require('./models/reply');
+const { default: Draft } = require('nylas/lib/models/draft');
 
 dotenv.config();
 
@@ -148,7 +149,7 @@ app.get('/nylas/read-emails', isAuthenticated, async (req, res) => {
         snippet: thread.snippet,
         fromEmail: thread.messages[0].from[0].email,
         ownEmail: user.emailAddress,
-        userId: user.id
+        userId: user.id,
       });
     } catch (error) {
       if (error.name === 'MongoError' && error.code === 11000) {
@@ -199,10 +200,11 @@ const openai = new OpenAIApi(configuration);
 // Add route for reading email from database and generating replies
 app.get('/nylas/read-email-gpt', isAuthenticated, async (req, res) => {
   const user = res.locals.user;
+  const nylas = Nylas.with(user.accessToken);
   const allEmails = await emails.find({
     ownEmail: user.emailAddress,
-  });
-  allEmails.forEach(async ({ subject, snippet }) => {
+  }).sort({ createdAt: -1 });
+  allEmails.forEach(async ({ subject, snippet, fromEmail }) => {
     const prompt = `Subject: ${subject} \n,Body: ${snippet},\n Please write a reply for the given email with subject and body sperated`;
     const response = await openai.createCompletion({
       model: 'text-davinci-003',
@@ -212,11 +214,18 @@ app.get('/nylas/read-email-gpt', isAuthenticated, async (req, res) => {
       frequency_penalty: 0,
       presence_penalty: 0,
     });
-    console.log('this is response', response.data.choices[0].text);
     await reply.create({
       body: response.data.choices[0].text,
       userEmail: user.emailAddress,
-    })
+    });
+
+    // Create a new draft object
+    const draft = new Draft(nylas, {
+      to: [{ name: '', email: fromEmail }],
+      subject: 'Subject',
+      body: response.data.choices[0].text,
+    });
+    draft.save({ opens: true });
   });
   return true;
 });
@@ -226,7 +235,7 @@ app.get('/nylas/read-replies', isAuthenticated, async (req, res) => {
   const user = res.locals.user;
   try {
     const replies = await reply.find({ userEmail: user.emailAddress });
-    return replies
+    return replies;
   } catch (err) {
     console.error(e.message);
   }
