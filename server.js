@@ -30,7 +30,14 @@ async function connectToMongoDB() {
 }
 
 // Enable CORS
-app.use(cors());
+app.use(
+  cors({
+    origin: 'https://nylas-fe.vercel.app', // change this to your frontend URL
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  })
+);
 
 // The port the express app will run on
 const port = process.env.PORT || 9000;
@@ -66,13 +73,13 @@ openWebhookTunnel({
           JSON.stringify(delta.objectData, undefined, 2)
         );
         break;
-        case WebhookTriggers.MessageCreated:
-          console.log(
-            'Webhook trigger received, new message created. Details: ',
-            JSON.stringify(delta.objectData, undefined, 2)
-          );
-          // You can now process the new email as per your requirements
-          break;
+      case WebhookTriggers.MessageCreated:
+        console.log(
+          'Webhook trigger received, new message created. Details: ',
+          JSON.stringify(delta.objectData, undefined, 2)
+        );
+        // You can now process the new email as per your requirements
+        break;
     }
   },
 }).then((webhookDetails) => {
@@ -144,7 +151,7 @@ async function isAuthenticated(req, res, next) {
 
 // Function to check for new emails
 async function checkForNewEmails(user, lastCheckTimestamp) {
-  console.log('this is user', user)
+  console.log('this is user', user);
   const nylas = Nylas.with(user.accessToken);
   const filter = {
     in: 'inbox',
@@ -246,9 +253,11 @@ const openai = new OpenAIApi(configuration);
 app.get('/nylas/read-email-gpt', isAuthenticated, async (req, res) => {
   const user = res.locals.user;
   const nylas = Nylas.with(user.accessToken);
-  const allEmails = await emails.find({
-    ownEmail: user.emailAddress,
-  }).sort({ createdAt: -1 });
+  const allEmails = await emails
+    .find({
+      ownEmail: user.emailAddress,
+    })
+    .sort({ createdAt: -1 });
   allEmails.forEach(async ({ subject, snippet, fromEmail }) => {
     const prompt = `Subject: ${subject} \n,Body: ${snippet},\n Please write a reply for the given email with subject and body sperated`;
     const response = await openai.createCompletion({
