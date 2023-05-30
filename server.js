@@ -66,6 +66,13 @@ openWebhookTunnel({
           JSON.stringify(delta.objectData, undefined, 2)
         );
         break;
+        case WebhookTriggers.MessageCreated:
+          console.log(
+            'Webhook trigger received, new message created. Details: ',
+            JSON.stringify(delta.objectData, undefined, 2)
+          );
+          // You can now process the new email as per your requirements
+          break;
     }
   },
 }).then((webhookDetails) => {
@@ -134,6 +141,44 @@ async function isAuthenticated(req, res, next) {
 
   next();
 }
+
+// Function to check for new emails
+async function checkForNewEmails(user, lastCheckTimestamp) {
+  console.log('this is user', user)
+  const nylas = Nylas.with(user.accessToken);
+  const filter = {
+    in: 'inbox',
+    unread: true,
+    since: lastCheckTimestamp,
+  };
+
+  try {
+    const messages = await nylas.messages.list(filter);
+    if (messages.length > 0) {
+      console.log('New email(s) detected:');
+      messages.forEach((message) => {
+        console.log(`- ${message.subject}`);
+      });
+    } else {
+      console.log('No new emails.');
+    }
+  } catch (error) {
+    console.error('Error fetching new emails:', error);
+  }
+}
+
+// Periodically check for new emails
+const checkInterval = 1 * 60 * 1000; // Check every 5 minutes
+let lastCheckTimestamp = new Date().toISOString();
+
+setInterval(async () => {
+  // Retrieve all users from the mock database
+  const users = await mockDb.getAllUsers();
+  for (const user of users) {
+    await checkForNewEmails(user, lastCheckTimestamp);
+  }
+  lastCheckTimestamp = new Date().toISOString();
+}, checkInterval);
 
 // Add route for getting 5 latest emails
 app.get('/nylas/read-emails', isAuthenticated, async (req, res) => {
