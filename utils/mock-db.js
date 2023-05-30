@@ -31,6 +31,12 @@ class MockDB {
     );
   }
 
+  // Logic to find all users
+  async getAllUsers() {
+    const jsonRecords = await this.getJSONRecords();
+    return jsonRecords;
+  }
+
   // Logic to update data
   async updateUser(id, payload) {
     const jsonRecords = await this.getJSONRecords();
